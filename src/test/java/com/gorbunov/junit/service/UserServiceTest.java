@@ -1,7 +1,8 @@
 package com.gorbunov.junit.service;
 
+import com.gorbunov.junit.TestBase;
 import com.gorbunov.junit.dto.User;
-import com.gorbunov.junit.paramResolver.UserServiceParameterResolver;
+import com.gorbunov.junit.extension.*;
 import org.hamcrest.MatcherAssert;
 import org.hamcrest.collection.IsEmptyCollection;
 import org.hamcrest.collection.IsMapContaining;
@@ -10,6 +11,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.*;
 
+import java.io.IOException;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -20,7 +23,8 @@ import static org.junit.jupiter.api.Assertions.*;
 
 @Tag("fast") // позволяет группировать тесты по классам и методам, которые нужно запустить, а какие нет.
 @Tag("user")
-@TestInstance(TestInstance.Lifecycle.PER_CLASS)// PER_METHOD -это стоит по умолчанию. Создается новый объект класса UserServiceTest для каждого теста.
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+// PER_METHOD -это стоит по умолчанию. Создается новый объект класса UserServiceTest для каждого теста.
 // Чтобы методы выполнялись по порядку. Надо ставить @Order над методами. Методы без этой аннотации вызовутся в произвольном порядке.
 //@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 //@TestMethodOrder(MethodOrderer.Random.class) // Всегда разный порядок
@@ -28,9 +32,13 @@ import static org.junit.jupiter.api.Assertions.*;
 //@TestMethodOrder(MethodOrderer.DisplayName.class) // В алфавитном порядке отображаемых имен методов(по умолчанию = названию методов)
 //@TestMethodOrder лучше не использвоать чтобы методы не зависили друг от друга
 @ExtendWith({
-        UserServiceParameterResolver.class
+        UserServiceParameterResolver.class,
+        PostProcessingExtension.class,
+        ConditionalExtension.class,
+        ThrowableExtension.class
+//        GlobalExtension.class
 })
-class UserServiceTest {
+class UserServiceTest extends TestBase {
 
     private static final User IVAN = User.of(1, "Ivan", "123");
     private static final User PETR = User.of(2, "Petr", "111");
@@ -39,7 +47,7 @@ class UserServiceTest {
 
     // В JUnit 4 необходим был конструктор без параметров. В JUnit 5 такого ограничения нет.
     UserServiceTest(TestInfo testInfo) {
-        System.out.println();
+        System.out.println("Конструктор");
     }
 
     // должен быть static для TestInstance.Lifecycle.PER_METHOD или менять на PER_CLASS
@@ -62,6 +70,8 @@ class UserServiceTest {
 
     @Test
     @DisplayName("user will be empty if no user added")
+    // Позволяет игнорировать тест. Flaky(чудной, со странностями) тесты - неустойчивые тесты. Разные значения при перезапуске тестов.
+    @Disabled("flaky, need to see")
     void usersEmptyIfNoUserAdded() {  // В названиях можно использовать snake case
         System.out.println("Test 1: " + this);
         List<User> users = userService.getAll();
@@ -71,8 +81,10 @@ class UserServiceTest {
         assertTrue(users.isEmpty(), () -> "User list should be empty");
     }
 
-    @Test
-    void usersSizeIfUserAdded() {
+//    @Test
+    @RepeatedTest(value = 5, name = RepeatedTest.LONG_DISPLAY_NAME)
+        //RepetitionInfo объект содержащий количество повторений и номер текущего повторения. Возможно, но вряд ли понадобиться
+    void usersSizeIfUserAdded(RepetitionInfo repetitionInfo) {
         System.out.println("Test 2: " + this);
         userService.add(IVAN);
         userService.add(PETR);
@@ -86,7 +98,10 @@ class UserServiceTest {
 
     @Test
     @Order(1)
-    void userConvertedToMapById() {
+    void userConvertedToMapById() throws IOException {
+        if(true){
+            throw new RuntimeException();
+        }
         userService.add(IVAN, PETR);
 
         Map<Integer, User> users = userService.getAllConvertedById();
@@ -120,10 +135,10 @@ class UserServiceTest {
     @Nested
     @DisplayName("Test user login functionality")
     @Tag("login")
+//    @Timeout(value = 200, unit = TimeUnit.MILLISECONDS)
     class LoginTest {
 
         @Test
-        @Tag("login")
         void loginFailIfPasswordIsNotCorrect() {
             userService.add(IVAN);
             Optional<User> optionalUser = userService.login(IVAN.getUsername(), "incorrect password");
@@ -132,7 +147,6 @@ class UserServiceTest {
         }
 
         @Test
-        @Tag("login")
         void loginFailIfPasswordIsDoesNotExists() {
             userService.add(IVAN);
             Optional<User> optionalUser = userService.login("Not existed user", "password");
@@ -141,7 +155,6 @@ class UserServiceTest {
         }
 
         @Test
-        @Tag("login")
 //    @org.junit.Test(expected = IllegalArgumentException.class) // JUnit 4. Старый вариант обработки ошибок в тестах
         void throwExceptionIfUserNameOrPasswordIsNull() {
             // это если писать примитивно
@@ -167,7 +180,6 @@ class UserServiceTest {
 
 
         @Test
-        @Tag("login")
         @Order(2)
         void loginSuccessIfUserExists() {
             userService.add(IVAN);
@@ -179,9 +191,23 @@ class UserServiceTest {
 //        assertEquals(IVAN, optionalUser.get());
         }
 
+        @Test
+//        @Timeout(value = 200, unit = TimeUnit.MILLISECONDS) // тоже самое, что и через код. Но с помощью аннотации. Можно ставить над классом.
+        void checkLoginFunctionalityPerformance() {
+//            Optional<User> userOptional = assertTimeout(Duration.ofMillis(200L), () -> {
+//                Thread.sleep(300L);
+//                return userService.login("dummy", IVAN.getPassword());
+//            });
+            // тот же функционал что и выше. Но для выполнения выделяется отдельный поток.
+            Optional<User> userOptional = assertTimeoutPreemptively(Duration.ofMillis(200L), () -> {
+//                Thread.sleep(300L);
+                return userService.login("dummy", IVAN.getPassword());
+            });
+        }
+
         @ParameterizedTest(name = "{arguments} test") // name определяет имена тестов с помощью placeholder'ов
 //        @ArgumentsSource()
-                //все эти аннотации используются только для 1 параметра: @NullSource @EmptySource @NullAndEmptySource @ValueSource @EnumSource
+        //все эти аннотации используются только для 1 параметра: @NullSource @EmptySource @NullAndEmptySource @ValueSource @EnumSource
 //        @NullSource // Предоставляет null аргументы в метод
 //        @EmptySource // Предоставляет empty аргументы в метод
 //        @NullAndEmptySource // Объединяет 2 аннотации выше
@@ -189,7 +215,8 @@ class UserServiceTest {
 //                "IVAN", "PETR"
 //        })
 //        @EnumSource // Только с enum'ами
-        @MethodSource("com.gorbunov.junit.service.UserServiceTest#getArgumentsForLoginTest") // самый частый и гибкий вариант
+        @MethodSource("com.gorbunov.junit.service.UserServiceTest#getArgumentsForLoginTest")
+        // самый частый и гибкий вариант
 //        В CSV не передать Optional или другие сложные объекты. Только строки и то что из них легко конвертить(int, double)
 //        @CsvFileSource(resources = "/login-test-data.csv", delimiter = ',', numLinesToSkip = 1)
 //        @CsvSource({  // то же что и CsvFileSource, только не надо создавать файл. CSV описывается прям в аннотации
