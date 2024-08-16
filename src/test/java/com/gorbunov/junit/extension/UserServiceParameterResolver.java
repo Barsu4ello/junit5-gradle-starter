@@ -1,5 +1,6 @@
 package com.gorbunov.junit.extension;
 
+import com.gorbunov.junit.dao.UserDao;
 import com.gorbunov.junit.service.UserService;
 import org.junit.jupiter.api.extension.ExtensionContext;
 import org.junit.jupiter.api.extension.ParameterContext;
@@ -16,6 +17,6 @@ public class UserServiceParameterResolver implements ParameterResolver {
     @Override
     public Object resolveParameter(ParameterContext parameterContext, ExtensionContext extensionContext) throws ParameterResolutionException {
         ExtensionContext.Store store = extensionContext.getStore(ExtensionContext.Namespace.create(extensionContext.getTestMethod()));
-        return store.getOrComputeIfAbsent(UserService.class, it -> new UserService());
+        return store.getOrComputeIfAbsent(UserService.class, it -> new UserService(new UserDao()));
     }
 }

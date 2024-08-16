@@ -1,6 +1,7 @@
 package com.gorbunov.junit.service;
 
 import com.gorbunov.junit.TestBase;
+import com.gorbunov.junit.dao.UserDao;
 import com.gorbunov.junit.dto.User;
 import com.gorbunov.junit.extension.*;
 import org.hamcrest.MatcherAssert;
@@ -10,6 +11,7 @@ import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.*;
+import org.mockito.Mockito;
 
 import java.io.IOException;
 import java.time.Duration;
@@ -35,7 +37,7 @@ import static org.junit.jupiter.api.Assertions.*;
         UserServiceParameterResolver.class,
         PostProcessingExtension.class,
         ConditionalExtension.class,
-        ThrowableExtension.class
+//        ThrowableExtension.class
 //        GlobalExtension.class
 })
 class UserServiceTest extends TestBase {
@@ -44,6 +46,7 @@ class UserServiceTest extends TestBase {
     private static final User PETR = User.of(2, "Petr", "111");
     private static final User VLAD = User.of(3, "Vlad", "123");
     private UserService userService;
+    private UserDao userDao;
 
     // В JUnit 4 необходим был конструктор без параметров. В JUnit 5 такого ограничения нет.
     UserServiceTest(TestInfo testInfo) {
@@ -61,10 +64,36 @@ class UserServiceTest extends TestBase {
         System.out.println("Before all: " + this);
     }
 
+//    @BeforeEach
+//    void prepare(UserService userService) {
+//        System.out.println("Before each: " + this);
+//        this.userService = userService;
+//    }
+
     @BeforeEach
-    void prepare(UserService userService) {
+    void prepare() {
         System.out.println("Before each: " + this);
-        this.userService = userService;
+        this.userDao = Mockito.mock(UserDao.class);
+        this.userService = new UserService(userDao);
+    }
+
+    @Test
+    void shouldDeleteExistedUser() {
+        userService.add(IVAN);
+        // 1 вариант. Более предпочтительный. Универсальный.
+//        Mockito.doReturn(true).when(userDao).delete(IVAN.getId());
+//        Mockito.doReturn(true).when(userDao).delete(Mockito.anyInt()); // Если все равно какой id кинуть.
+
+        //2 вариант. Не всегда работает. Но позволяет настроить несколько возвратов значений. В первый раз - true, во второй И ПОСЛЕДУЮЩИЕ - false.
+        Mockito.when(userService.delete(IVAN.getId()))
+                .thenReturn(true)
+                .thenReturn(false);
+
+        boolean deleteResult = userService.delete(IVAN.getId());
+        System.out.println(userService.delete(IVAN.getId()));
+        System.out.println(userService.delete(IVAN.getId()));
+
+        assertThat(deleteResult).isTrue();
     }
 
 

@@ -2,7 +2,6 @@ package com.gorbunov.junit.service;
 
 import com.gorbunov.junit.dao.UserDao;
 import com.gorbunov.junit.dto.User;
-import lombok.Lombok;
 
 import java.util.*;
 import java.util.function.Function;
@@ -11,7 +10,15 @@ import java.util.stream.Collectors;
 public class UserService {
 
     private final List<User> users = new ArrayList<>();
-    private final UserDao userDao =new UserDao();
+    private final UserDao userDao;
+
+    public UserService(UserDao userDao) {
+        this.userDao = userDao;
+    }
+
+    public boolean delete(Integer userId) {
+        return userDao.delete(userId);
+    }
 
     public List<User> getAll() {
 

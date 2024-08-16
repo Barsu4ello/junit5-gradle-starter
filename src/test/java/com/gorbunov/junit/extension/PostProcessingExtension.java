@@ -16,7 +16,7 @@ public class PostProcessingExtension implements TestInstancePostProcessor {
         Field[] fields = testInstance.getClass().getDeclaredFields();
         for (Field field : fields) {
             if(field.isAnnotationPresent(Test.class)) { // но нужно естественно, чтобы была аннотация типа @Autowired или типо того и проверка на тип поля.
-                field.set(testInstance, new UserService());
+                field.set(testInstance, new UserService(null));
             }
         }
     }
