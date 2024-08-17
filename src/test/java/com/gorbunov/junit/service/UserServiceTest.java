@@ -11,7 +11,8 @@ import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.*;
-import org.mockito.Mockito;
+import org.mockito.*;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.io.IOException;
 import java.time.Duration;
@@ -37,6 +38,7 @@ import static org.junit.jupiter.api.Assertions.*;
         UserServiceParameterResolver.class,
         PostProcessingExtension.class,
         ConditionalExtension.class,
+        MockitoExtension.class
 //        ThrowableExtension.class
 //        GlobalExtension.class
 })
@@ -45,8 +47,13 @@ class UserServiceTest extends TestBase {
     private static final User IVAN = User.of(1, "Ivan", "123");
     private static final User PETR = User.of(2, "Petr", "111");
     private static final User VLAD = User.of(3, "Vlad", "123");
+    @InjectMocks // Говорит: внедри сюда mock(объект с аннотацией @Mock или  @Spy)
     private UserService userService;
+    @Mock(lenient = true) // = Mockito.mock(UserDao.class)
+//    @Spy // = Mockito.spy(new UserDao())
     private UserDao userDao;
+    @Captor // Позволяет не создавать ArgumentCaptor вручную.
+    private ArgumentCaptor<Integer> argumentCaptor;
 
     // В JUnit 4 необходим был конструктор без параметров. В JUnit 5 такого ограничения нет.
     UserServiceTest(TestInfo testInfo) {
@@ -73,8 +80,25 @@ class UserServiceTest extends TestBase {
     @BeforeEach
     void prepare() {
         System.out.println("Before each: " + this);
-        this.userDao = Mockito.mock(UserDao.class);
-        this.userService = new UserService(userDao);
+        // Если все тесты использют одинаковый stub, то можно использолать в @BeforeEach инициализацию этого stub
+        // Но что если в каком-то тесте это поведение надо переопределить?
+        // Тогда будет ошибка от Mockito Extension. Пример: throwExceptionIfDatabaseIsNotAvailable()
+        // Но у нашего userDao можно указать в аннотации @Mock(lenient = true) и тогда ошибка будет игнорироваться. Не ркомендуется + Deprecated
+        Mockito.doReturn(true).when(userDao).delete(Mockito.anyInt());
+        // lenient = true можно указать и при создании mock вручную
+//        this.userDao = Mockito.mock(UserDao.class, Mockito.withSettings().lenient());
+        // lenient = true можно указать для конкретного stub. Но только префиксальный вариант. Который не предпочтителен при работе со spy.
+//        Mockito.lenient().when(userDao.delete(IVAN.getId())).thenReturn(true);
+//        this.userDao = Mockito.mock(UserDao.class); // создание Mock
+//        this.userDao = Mockito.spy(new UserDao()); // создание Spy
+//        this.userService = new UserService(userDao);
+    }
+
+    @Test
+    void throwExceptionIfDatabaseIsNotAvailable() {
+        Mockito.doThrow(RuntimeException.class).when(userDao).delete(IVAN.getId());
+
+        assertThrows(RuntimeException.class, () -> userService.delete(IVAN.getId()));
     }
 
     @Test
@@ -85,13 +109,23 @@ class UserServiceTest extends TestBase {
 //        Mockito.doReturn(true).when(userDao).delete(Mockito.anyInt()); // Если все равно какой id кинуть.
 
         //2 вариант. Не всегда работает. Но позволяет настроить несколько возвратов значений. В первый раз - true, во второй И ПОСЛЕДУЮЩИЕ - false.
-        Mockito.when(userService.delete(IVAN.getId()))
-                .thenReturn(true)
-                .thenReturn(false);
+        // Не работает со Spy, так как он использует реальный userDao и в части when(userDao.delete(IVAN.getId())) вызывает метод, и мы получаем Exception.
+//        Mockito.when(userDao.delete(IVAN.getId()))
+//                .thenReturn(true)
+//                .thenReturn(false);
 
         boolean deleteResult = userService.delete(IVAN.getId());
         System.out.println(userService.delete(IVAN.getId()));
         System.out.println(userService.delete(IVAN.getId()));
+
+//        Mockito.verify(userDao, Mockito.times(2)).delete(IVAN.getId()); // Проверяем сколько раз вызывался метод
+
+        // ArgumentCaptor позволяет отследить с какими аргументами был вызван метод mock или spy.
+//        ArgumentCaptor<Integer> argumentCaptor = ArgumentCaptor.forClass(Integer.class);
+        Mockito.verify(userDao, Mockito.times(3)).delete(argumentCaptor.capture()); // Проверяем сколько раз вызывался метод
+        assertThat(argumentCaptor.getValue()).isEqualTo(1);
+
+        Mockito.reset(userDao); // Используется для сборса количества вызовов мока. Но лучше просто на каждый тест создавать новый Mock. Как мы и делали.
 
         assertThat(deleteResult).isTrue();
     }
@@ -110,9 +144,9 @@ class UserServiceTest extends TestBase {
         assertTrue(users.isEmpty(), () -> "User list should be empty");
     }
 
-//    @Test
+    //    @Test
     @RepeatedTest(value = 5, name = RepeatedTest.LONG_DISPLAY_NAME)
-        //RepetitionInfo объект содержащий количество повторений и номер текущего повторения. Возможно, но вряд ли понадобиться
+    //RepetitionInfo объект содержащий количество повторений и номер текущего повторения. Возможно, но вряд ли понадобиться
     void usersSizeIfUserAdded(RepetitionInfo repetitionInfo) {
         System.out.println("Test 2: " + this);
         userService.add(IVAN);
@@ -128,7 +162,7 @@ class UserServiceTest extends TestBase {
     @Test
     @Order(1)
     void userConvertedToMapById() throws IOException {
-        if(true){
+        if (true) {
             throw new RuntimeException();
         }
         userService.add(IVAN, PETR);
@@ -144,6 +178,14 @@ class UserServiceTest extends TestBase {
         );
 
     }
+
+    //Для BDD тестов используется класс BDDMockito с аналогичными методами.
+//    @Test
+//    void bddTest() {
+//        BDDMockito.given(userDao.delete(IVAN.getId())).willReturn(true);
+//
+//        BDDMockito.willReturn(true).given(userDao).delete(IVAN.getId());
+//    }
 
     @AfterEach
     void deleteDataFromDB() {
