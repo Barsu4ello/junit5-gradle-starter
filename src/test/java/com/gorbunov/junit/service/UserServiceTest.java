@@ -104,6 +104,7 @@ class UserServiceTest extends TestBase {
     @Test
     void shouldDeleteExistedUser() {
         userService.add(IVAN);
+
         // 1 вариант. Более предпочтительный. Универсальный.
 //        Mockito.doReturn(true).when(userDao).delete(IVAN.getId());
 //        Mockito.doReturn(true).when(userDao).delete(Mockito.anyInt()); // Если все равно какой id кинуть.
